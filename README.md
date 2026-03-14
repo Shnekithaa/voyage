@@ -157,3 +157,10 @@ Backend (server/package.json):
 ## License
 
 This project is currently unlicensed.
+
+## Live Links
+
+https://voyage-showcase-client.vercel.app/
+
+Backend:
+https://voyage-bfwp.onrender.com/api/health
