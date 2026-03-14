@@ -393,6 +393,8 @@ export default function CheckoutForm() {
       if (status === 401)      toast.error('Session expired — please sign in again and retry');
       else if (status === 409) toast.error('These dates are no longer available. Please choose different dates.');
       else if (status === 400) toast.error(`Booking error: ${message}`);
+      else if (error.code === 'ECONNABORTED')
+        toast.error('Server is taking too long to respond. Please retry in a few seconds (free-tier cold start).');
       else                     toast.error(`Could not complete booking: ${message}`);
 
       console.error('❌ createBooking failed — status:', status, '| message:', message, error);

@@ -138,33 +138,6 @@ router.post('/create', optionalAuth, async (req, res, next) => {
       status: 'confirmed',
     });
 
-    // Generate itinerary (non-blocking — don't fail the booking if AI fails)
-    const destination = hotel.destination;
-    let itinerary = '';
-    try {
-      itinerary = await generateItinerary(
-        destination, hotel,
-        vibeSearch?.vibe || 'cultural exploration',
-        nights.toString()
-      );
-      booking.itinerary = itinerary;
-      await booking.save();
-    } catch (err) {
-      console.warn('Itinerary generation failed:', err.message);
-    }
-
-    // Send email (non-blocking)
-    try {
-      const emailResult = await sendVibeTicketEmail(booking, destination, hotel, itinerary || 'Itinerary will be emailed shortly.');
-      if (emailResult.success) {
-        booking.emailSent = true;
-        await booking.save();
-      }
-      console.log(`📧 Email sent for ${booking.bookingReference}: ${emailResult.success}`);
-    } catch (err) {
-      console.warn('Email sending failed:', err.message);
-    }
-
     res.status(200).json({
       success: true,
       data: {
@@ -172,6 +145,42 @@ router.post('/create', optionalAuth, async (req, res, next) => {
         totalAmount,
         bookingId: booking._id,
       },
+    });
+
+    // Continue heavy work in background so checkout never times out for users.
+    setImmediate(async () => {
+      const destination = hotel.destination;
+      let itinerary = '';
+
+      try {
+        itinerary = await generateItinerary(
+          destination,
+          hotel,
+          vibeSearch?.vibe || 'cultural exploration',
+          nights.toString()
+        );
+
+        await Booking.findByIdAndUpdate(booking._id, { itinerary });
+      } catch (err) {
+        console.warn('Itinerary generation failed:', err.message);
+      }
+
+      try {
+        const emailResult = await sendVibeTicketEmail(
+          { ...booking.toObject(), itinerary },
+          destination,
+          hotel,
+          itinerary || 'Itinerary will be emailed shortly.'
+        );
+
+        if (emailResult.success) {
+          await Booking.findByIdAndUpdate(booking._id, { emailSent: true });
+        }
+
+        console.log(`📧 Email sent for ${booking.bookingReference}: ${emailResult.success}`);
+      } catch (err) {
+        console.warn('Email sending failed:', err.message);
+      }
     });
   } catch (error) {
     next(error);
