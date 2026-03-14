@@ -7,6 +7,28 @@ import ElectricButton from '../components/ui/ElectricButton';
 import VoyageLogo from '../components/layout/VoyageLogo';
 import toast from 'react-hot-toast';
 
+function getAuthErrorMessage(error) {
+  const code = error?.code;
+  const fallback = error?.message || 'Authentication failed. Please try again.';
+
+  const map = {
+    'auth/invalid-email': 'Invalid email address format.',
+    'auth/user-not-found': 'No account found with this email.',
+    'auth/invalid-credential': 'Invalid email or password.',
+    'auth/wrong-password': 'Invalid email or password.',
+    'auth/email-already-in-use': 'This email is already registered.',
+    'auth/weak-password': 'Password should be at least 6 characters.',
+    'auth/too-many-requests': 'Too many attempts. Please try again later.',
+    'auth/network-request-failed': 'Network error. Check your internet and try again.',
+    'auth/operation-not-allowed': 'This sign-in method is disabled in Firebase console.',
+    'auth/unauthorized-domain': 'This domain is not authorized in Firebase Auth settings.',
+    'auth/popup-blocked': 'Popup blocked by browser. Please allow popups and try again.',
+    'auth/popup-closed-by-user': 'Google sign-in popup was closed before completing sign-in.',
+  };
+
+  return map[code] || fallback;
+}
+
 // ─── Google Icon ──────────────────────────────────────────────────────────────
 function GoogleIcon() {
   return (
@@ -165,9 +187,7 @@ export default function LoginPage() {
         setErrors({ password: 'Incorrect password' });
       else if (code === 'auth/email-already-in-use')
         setErrors({ email: 'Email already registered' });
-      else if (code === 'auth/too-many-requests')
-        toast.error('Too many attempts. Try again later.');
-      else toast.error(error.message || 'Authentication failed');
+      else toast.error(getAuthErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -180,7 +200,9 @@ export default function LoginPage() {
       toast.success('Signed in with Google!');
       navigate(from, { replace: true });
     } catch (error) {
-      if (error.code !== 'auth/popup-closed-by-user') toast.error('Google sign-in failed');
+      if (error.code !== 'auth/popup-closed-by-user') {
+        toast.error(getAuthErrorMessage(error));
+      }
     } finally {
       setGoogleLoading(false);
     }

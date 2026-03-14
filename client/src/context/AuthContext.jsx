@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
 } from 'firebase/auth';
@@ -34,7 +35,22 @@ export function AuthProvider({ children }) {
     return cred;
   };
 
-  const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
+  const loginWithGoogle = async () => {
+    try {
+      return await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      // Some browsers/environments block popups; redirect is the most reliable fallback.
+      if (
+        error?.code === 'auth/popup-blocked' ||
+        error?.code === 'auth/cancelled-popup-request' ||
+        error?.code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        await signInWithRedirect(auth, googleProvider);
+        return null;
+      }
+      throw error;
+    }
+  };
 
   const logout = () => signOut(auth);
 
