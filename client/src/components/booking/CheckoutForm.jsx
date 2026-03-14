@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { User, Mail, Phone, Calendar, CreditCard, MapPin, Star, X, AlertCircle, LogIn } from 'lucide-react';
 import { useBooking } from '../../context/BookingContext';
 import { useAuth } from '../../context/AuthContext';
-import { createBooking } from '../../api/axios';
+import { createBooking, getUserBookings } from '../../api/axios';
 import ElectricButton from '../ui/ElectricButton';
 import DateRangePicker, { formatDate } from './DateRangePicker';
 import toast from 'react-hot-toast';
@@ -364,6 +364,42 @@ export default function CheckoutForm() {
     });
 
     setLoading(true);
+
+    const recoverTimedOutBooking = async () => {
+      // The write may have completed even when the request timed out on free-tier cold starts.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+
+        try {
+          const bookingsResp = await getUserBookings();
+          const bookings = bookingsResp.data?.data || [];
+
+          const match = bookings.find((b) => {
+            const bookingHotelId = b?.hotel?._id || b?.hotel;
+            const matchesHotel = bookingHotelId === state.hotel._id;
+            const matchesEmail = (b?.guestInfo?.email || '').toLowerCase() === formData.email.toLowerCase();
+            const matchesCheckIn = (b?.checkIn || '').startsWith(checkInISO);
+            const matchesCheckOut = (b?.checkOut || '').startsWith(checkOutISO);
+            return matchesHotel && matchesEmail && matchesCheckIn && matchesCheckOut;
+          });
+
+          if (match) {
+            dispatch({ type: 'SET_PAYMENT', payload: { clientSecret: null, bookingReference: match.bookingReference } });
+            dispatch({ type: 'SET_PRICING', payload: { totalAmount: match?.pricing?.totalAmount ?? total } });
+            toast.success('Booking completed. Redirecting to confirmation...');
+            navigate('/confirmation');
+            return true;
+          }
+        } catch {
+          // Keep trying a couple more times before surfacing timeout to the user.
+        }
+      }
+
+      return false;
+    };
+
     try {
       const response = await createBooking({
         hotelId:      state.hotel._id,
@@ -376,7 +412,7 @@ export default function CheckoutForm() {
         },
         guests:     state.guests,
         vibeSearch: state.searchParams,
-      });
+      }, { timeout: 60000 });
 
       const { bookingReference, totalAmount } = response.data.data;
 
@@ -393,8 +429,12 @@ export default function CheckoutForm() {
       if (status === 401)      toast.error('Session expired — please sign in again and retry');
       else if (status === 409) toast.error('These dates are no longer available. Please choose different dates.');
       else if (status === 400) toast.error(`Booking error: ${message}`);
-      else if (error.code === 'ECONNABORTED')
-        toast.error('Server is taking too long to respond. Please retry in a few seconds (free-tier cold start).');
+      else if (error.code === 'ECONNABORTED') {
+        const recovered = await recoverTimedOutBooking();
+        if (!recovered) {
+          toast.error('Server took too long to respond. Your booking may still have gone through, please check My Trips.');
+        }
+      }
       else                     toast.error(`Could not complete booking: ${message}`);
 
       console.error('❌ createBooking failed — status:', status, '| message:', message, error);

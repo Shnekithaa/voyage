@@ -49,6 +49,6 @@ export const createPaymentIntent = (data) => API.post('/payments/create-intent',
 export const confirmPayment = (data) => API.post('/payments/confirm', data);
 export const getBooking = (reference) => API.get(`/bookings/${reference}`);
 export const getUserBookings = () => API.get('/bookings/user');
-export const createBooking = (data) => API.post('/bookings/create', data);
+export const createBooking = (data, config = {}) => API.post('/bookings/create', data, config);
 
 export default API;
